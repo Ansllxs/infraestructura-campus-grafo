@@ -82,7 +82,3 @@ B,C,140,15,false,false
 
 ## Autora
 Angie Alpízar Porras
-
----
-> Entrega individual. El uso de asistentes de IA para la generación de código del
-> proyecto está prohibido según el enunciado.
