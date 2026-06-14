@@ -24,8 +24,32 @@ struct AristaOrden {
 };
 
 // Funcion de comparacion: ordena de menor a mayor peso.
-bool compararPorPeso(AristaOrden a, AristaOrden b) {
+inline bool compararPorPeso(AristaOrden a, AristaOrden b) {
     return a.peso < b.peso;
+}
+
+// Estructura para el reporte de nodos criticos por grado.
+struct NodoGrado {
+    int grado;     // cuantas aristas tocan el nodo
+    int indice;    // posicion del nodo
+};
+
+// Ordena de mayor a menor grado (los mas conectados primero).
+inline bool compararPorGrado(NodoGrado a, NodoGrado b) {
+    return a.grado > b.grado;
+}
+
+// Estructura para el reporte de puentes por tamano de componentes.
+struct PuenteInfo {
+    int arista;    // numero de la arista que es puente
+    int ladoA;     // nodos que quedan de un lado al quitar el puente
+    int ladoB;     // nodos que quedan del otro lado
+    int menor;     // el menor de los dos lados (que tan critico es)
+};
+
+// Ordena de mayor a menor lado menor aislado (los mas criticos primero).
+inline bool compararPorComponentes(PuenteInfo a, PuenteInfo b) {
+    return a.menor > b.menor;
 }
 
 // Clase que representa el grafo de la red del campus.
@@ -297,12 +321,9 @@ public:
     // MODULO 2: Conectividad y puntos criticos
     // ------------------------------------------------------------
 
-    // Construye una lista de adyacencia tratando el grafo como NO dirigido
-    // (sin importar el sentido de las vias). La usamos para conectividad,
-    // puentes y articulaciones. Llena dos vectores en paralelo:
-    //   gv[i] = lista de nodos vecinos de i
-    //   ge[i] = numero de la arista por la que se llega a ese vecino
-    // Las aristas cerradas (simulacion) se ignoran.
+    // Arma una lista de adyacencia sin importar el sentido de las vias.
+    // Llena gv[i] con los vecinos del nodo i, y ge[i] con la arista por la
+    // que se llega a cada vecino. Las aristas cerradas no se toman en cuenta.
     void construirNoDirigida(vector<vector<int>> &gv, vector<vector<int>> &ge) {
         gv.clear();
         ge.clear();
@@ -411,17 +432,11 @@ public:
         cout << "----------------------------------------" << endl;
     }
 
-    // ---- Puentes y puntos de articulacion (algoritmo de Tarjan) ----
-    //
-    // Un PUENTE es una arista que, si se quita, parte el grafo en mas trozos.
-    // Un PUNTO DE ARTICULACION es un nodo que, si se quita, hace lo mismo.
-    //
-    // Tarjan recorre el grafo en profundidad guardando para cada nodo:
-    //   disc[u] = en que paso fue descubierto (orden de visita)
-    //   low[u]  = el descubrimiento mas antiguo al que puede "trepar"
-    //             usando las aristas del arbol y una arista de retorno.
-    // Con esos dos numeros se decide si una arista es puente o un nodo
-    // es articulacion.
+    // Puentes y puntos de articulacion (algoritmo de Tarjan).
+    // Un puente es una arista que si se quita parte el grafo en mas pedazos.
+    // Un punto de articulacion es un nodo que hace lo mismo.
+    // Se usan dos arreglos: disc (cuando se visito el nodo) y low (el nodo mas
+    // antiguo al que se puede llegar). Con esos numeros se decide.
 
     void dfsTarjan(int u, int aristaPadre, int &tiempo,
                    vector<vector<int>> &gv, vector<vector<int>> &ge,
@@ -472,15 +487,19 @@ public:
         }
     }
 
-    // Ejecuta Tarjan en todo el grafo y muestra los puentes y las
-    // articulaciones encontradas.
-    void mostrarPuentesYArticulaciones() {
+    // Ejecuta Tarjan en todo el grafo y deja en "puentes" los numeros de las
+    // aristas que son puente, y en "esArticulacion" cuales nodos son
+    // puntos de articulacion. Es la parte de calculo (sin imprimir), para
+    // poder reutilizarla en los reportes del Modulo 6.
+    void calcularTarjan(vector<int> &puentes, vector<bool> &esArticulacion) {
         vector<vector<int>> gv, ge;
         construirNoDirigida(gv, ge);
 
         int n = (int)vertices.size();
         vector<int> disc, low;
-        vector<bool> visitado, esArticulacion;
+        vector<bool> visitado;
+        puentes.clear();
+        esArticulacion.clear();
         for (int i = 0; i < n; i++) {
             disc.push_back(0);
             low.push_back(0);
@@ -488,9 +507,7 @@ public:
             esArticulacion.push_back(false);
         }
 
-        vector<int> puentes;   // guardamos los numeros de arista que son puente
         int tiempo = 0;
-
         // Recorremos cada componente (por si el grafo no es conexo).
         for (int i = 0; i < n; i++) {
             if (!visitado[i]) {
@@ -504,6 +521,14 @@ public:
                 }
             }
         }
+    }
+
+    // Ejecuta Tarjan y muestra los puentes y las articulaciones encontradas.
+    void mostrarPuentesYArticulaciones() {
+        int n = (int)vertices.size();
+        vector<int> puentes;
+        vector<bool> esArticulacion;
+        calcularTarjan(puentes, esArticulacion);
 
         cout << "----------------------------------------" << endl;
         cout << " PUENTES (caminos criticos)" << endl;
@@ -604,14 +629,11 @@ public:
         cout << "   Tiempo total:    " << totalTiempo << endl;
     }
 
-    // Algoritmo de DIJKSTRA (un origen, un destino).
-    // usarTiempo = true -> el peso es el tiempo; false -> el peso es la distancia.
-    // Llena los vectores previo y prevArista para poder reconstruir el camino.
-    // Respeta el sentido de las vias (usa la adyacencia dirigida) e ignora
-    // las aristas cerradas. Devuelve true si logro llegar al destino.
-    //
-    // Version sencilla: en cada paso busca el nodo no procesado con menor
-    // distancia recorriendo el arreglo (no usa cola de prioridad).
+    // Algoritmo de Dijkstra para la ruta mas corta de un origen a un destino.
+    // usarTiempo = true usa el tiempo como peso; false usa la distancia.
+    // En cada paso agarra el nodo no visitado con la menor distancia y revisa
+    // sus vecinos. Respeta el sentido de las vias e ignora las cerradas.
+    // Devuelve true si logro llegar al destino.
     bool dijkstra(int origen, int destino, bool usarTiempo,
                   vector<int> &previo, vector<int> &prevArista) {
         int n = (int)vertices.size();
@@ -666,10 +688,8 @@ public:
         return dist[destino] < 1e18;
     }
 
-    // Algoritmo A* con heuristica euclidiana.
-    // El costo real es la distancia y la heuristica es la linea recta hasta
-    // el destino, asi A* "prefiere" avanzar hacia el destino.
-    // Tambien respeta el sentido de las vias e ignora aristas cerradas.
+    // Algoritmo A*. Es parecido a Dijkstra pero ademas usa la distancia en
+    // linea recta hasta el destino para avanzar mas directo hacia el.
     bool aEstrella(int origen, int destino,
                    vector<int> &previo, vector<int> &prevArista) {
         int n = (int)vertices.size();
@@ -844,13 +864,10 @@ public:
     // MODULO 4: Cobertura minima (MST con Kruskal + Union-Find)
     // ------------------------------------------------------------
 
-    // Calcula el arbol de expansion minima (MST) con el algoritmo de Kruskal:
-    //   1. Se ordenan TODAS las aristas de menor a mayor peso (largo).
-    //   2. Se van tomando una por una; se acepta una arista solo si une dos
-    //      grupos distintos (asi no se forman ciclos), usando Union-Find.
-    //   3. Se repite hasta conectar todo lo que se pueda.
-    // Reporta el costo total, la lista de aristas usadas y el % de ahorro
-    // comparado con usar TODA la red.
+    // Calcula el arbol de expansion minima (MST) con Kruskal.
+    // Primero ordena las aristas de menor a mayor peso y luego las va tomando
+    // una por una. Solo usa una arista si une dos grupos distintos (para no
+    // hacer ciclos), usando Union-Find. Al final muestra el costo y el ahorro.
     void calcularMST() {
         cout << "----------------------------------------" << endl;
         cout << " ARBOL DE EXPANSION MINIMA (Kruskal)" << endl;
@@ -907,6 +924,335 @@ public:
             cout << "Ahorro respecto a la red completa: " << ahorro << " %" << endl;
         }
         cout << "----------------------------------------" << endl;
+    }
+
+    // ------------------------------------------------------------
+    // MODULO 5: Simulacion de cierres
+    // ------------------------------------------------------------
+
+    // Busca una arista entre los nodos u y v (en cualquier sentido) que este
+    // abierta y la marca como cerrada. Devuelve su numero, o -1 si no existe.
+    int cerrarArista(string u, string v) {
+        for (int e = 0; e < (int)aristas.size(); e++) {
+            if (aristas[e].cerrada) {
+                continue;
+            }
+            bool igual = (aristas[e].u == u && aristas[e].v == v) ||
+                         (aristas[e].u == v && aristas[e].v == u);
+            if (igual) {
+                aristas[e].cerrada = true;
+                return e;
+            }
+        }
+        return -1;
+    }
+
+    // Vuelve a abrir una arista (la pone disponible otra vez).
+    void abrirArista(int e) {
+        if (e >= 0 && e < (int)aristas.size()) {
+            aristas[e].cerrada = false;
+        }
+    }
+
+    // Calcula la ruta mas rapida (Dijkstra por tiempo) entre dos nodos y
+    // devuelve por referencia el largo total, el tiempo total y la cantidad
+    // de nodos de la ruta. Devuelve true si existe ruta.
+    bool costoRuta(string sOri, string sDest, double &largo,
+                   double &tiempo, int &nodos) {
+        largo = 0;
+        tiempo = 0;
+        nodos = 0;
+        int oi = buscarIndice(sOri);
+        int di = buscarIndice(sDest);
+        if (oi == -1 || di == -1) {
+            return false;
+        }
+
+        vector<int> previo, prevArista;
+        bool ok = dijkstra(oi, di, true, previo, prevArista);  // true = por tiempo
+        if (!ok) {
+            return false;
+        }
+        vector<int> camino = reconstruirCamino(previo, oi, di);
+        nodos = (int)camino.size();
+        for (int k = 1; k < (int)camino.size(); k++) {
+            int e = prevArista[camino[k]];
+            largo += aristas[e].length;
+            tiempo += aristas[e].tiempo();
+        }
+        return true;
+    }
+
+    // Simula el cierre de una o varias aristas y compara la ruta antes y
+    // despues, mostrando el desvio (diferencia de longitud y de tiempo).
+    // "cierres" trae los pares de nodos a cerrar (uno tras otro).
+    void simularCierres(string sOri, string sDest,
+                        vector<string> cierreU, vector<string> cierreV) {
+        cout << "----------------------------------------" << endl;
+        cout << " SIMULACION DE CIERRES" << endl;
+        cout << " Ruta de " << sOri << " a " << sDest << endl;
+        cout << "----------------------------------------" << endl;
+
+        // 1) Ruta ANTES de cerrar nada.
+        double largoAntes, tiempoAntes;
+        int nodosAntes;
+        bool habiaRuta = costoRuta(sOri, sDest, largoAntes, tiempoAntes, nodosAntes);
+        if (!habiaRuta) {
+            cout << "No existe ruta entre esos nodos (ni antes de cerrar)." << endl;
+            return;
+        }
+        cout << "ANTES del cierre:" << endl;
+        cout << "   Longitud: " << largoAntes << endl;
+        cout << "   Tiempo:   " << tiempoAntes << endl;
+        cout << "   Nodos:    " << nodosAntes << endl;
+
+        // 2) Cerrar las aristas indicadas.
+        vector<int> cerradas;
+        cout << endl << "Cerrando aristas:" << endl;
+        for (int i = 0; i < (int)cierreU.size(); i++) {
+            int e = cerrarArista(cierreU[i], cierreV[i]);
+            if (e == -1) {
+                cout << "   " << cierreU[i] << " - " << cierreV[i]
+                     << " : no existe o ya estaba cerrada." << endl;
+            } else {
+                cerradas.push_back(e);
+                cout << "   " << cierreU[i] << " - " << cierreV[i]
+                     << " : cerrada." << endl;
+            }
+        }
+
+        // 3) Ruta DESPUES de cerrar.
+        double largoDespues, tiempoDespues;
+        int nodosDespues;
+        bool hayRuta = costoRuta(sOri, sDest, largoDespues, tiempoDespues, nodosDespues);
+
+        cout << endl << "DESPUES del cierre:" << endl;
+        if (!hayRuta) {
+            cout << "   Ya NO existe ruta: los nodos quedaron incomunicados." << endl;
+        } else {
+            cout << "   Longitud: " << largoDespues << endl;
+            cout << "   Tiempo:   " << tiempoDespues << endl;
+            cout << "   Nodos:    " << nodosDespues << endl;
+
+            cout << endl << "DESVIO (diferencia):" << endl;
+            cout << "   Delta longitud: " << (largoDespues - largoAntes) << endl;
+            cout << "   Delta tiempo:   " << (tiempoDespues - tiempoAntes) << endl;
+        }
+
+        // 4) Volver a abrir las aristas para no afectar otras consultas.
+        for (int i = 0; i < (int)cerradas.size(); i++) {
+            abrirArista(cerradas[i]);
+        }
+        cout << "----------------------------------------" << endl;
+    }
+
+    // ------------------------------------------------------------
+    // MODULO 6: Reportes y representacion grafica (GraphViz)
+    // ------------------------------------------------------------
+
+    // Calcula el grado (cantidad de aristas que lo tocan) de cada nodo.
+    vector<int> calcularGrados() {
+        vector<int> grado;
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            grado.push_back(0);
+        }
+        for (int e = 0; e < (int)aristas.size(); e++) {
+            if (aristas[e].cerrada) {
+                continue;
+            }
+            int posU = buscarIndice(aristas[e].u);
+            int posV = buscarIndice(aristas[e].v);
+            if (posU != -1) grado[posU]++;
+            if (posV != -1) grado[posV]++;
+        }
+        return grado;
+    }
+
+    // Reporte: los k nodos mas criticos segun su grado (los mas conectados).
+    void reporteNodosPorGrado(int k) {
+        vector<int> grado = calcularGrados();
+
+        vector<NodoGrado> lista;
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            NodoGrado ng;
+            ng.grado = grado[i];
+            ng.indice = i;
+            lista.push_back(ng);
+        }
+        sort(lista.begin(), lista.end(), compararPorGrado);
+
+        cout << "----------------------------------------" << endl;
+        cout << " TOP " << k << " NODOS CRITICOS (por grado)" << endl;
+        cout << "----------------------------------------" << endl;
+        int total = (int)lista.size();
+        if (k > total) k = total;
+        for (int i = 0; i < k; i++) {
+            int pos = lista[i].indice;
+            cout << "   " << (i + 1) << ") " << vertices[pos].id
+                 << " [" << vertices[pos].type << "] grado = "
+                 << lista[i].grado << endl;
+        }
+        cout << "----------------------------------------" << endl;
+    }
+
+    // Cuenta cuantos nodos se alcanzan desde "inicio" usando BFS, respetando
+    // las aristas cerradas. Sirve para medir el tamano de un lado del puente.
+    int contarAlcanzables(int inicio) {
+        vector<vector<int>> gv, ge;
+        construirNoDirigida(gv, ge);  // ya ignora las aristas cerradas
+
+        vector<bool> visitado;
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            visitado.push_back(false);
+        }
+        vector<int> grupo;
+        recorridoBFS(inicio, gv, visitado, grupo);
+        return (int)grupo.size();
+    }
+
+    // Reporte: los k puentes mas criticos segun el tamano de los componentes
+    // que generan al quitarlos. Por cada puente lo cerramos un momento y
+    // contamos cuantos nodos quedan de cada lado.
+    void reportePuentesPorComponentes(int k) {
+        vector<int> puentes;
+        vector<bool> esArticulacion;
+        calcularTarjan(puentes, esArticulacion);
+
+        cout << "----------------------------------------" << endl;
+        cout << " TOP " << k << " PUENTES CRITICOS (por componentes)" << endl;
+        cout << "----------------------------------------" << endl;
+
+        if (puentes.size() == 0) {
+            cout << "No hay puentes en el grafo." << endl;
+            cout << "----------------------------------------" << endl;
+            return;
+        }
+
+        vector<PuenteInfo> lista;
+        for (int p = 0; p < (int)puentes.size(); p++) {
+            int e = puentes[p];
+            int u = buscarIndice(aristas[e].u);
+            int v = buscarIndice(aristas[e].v);
+
+            // Cerramos el puente y medimos cada lado.
+            aristas[e].cerrada = true;
+            int ladoA = contarAlcanzables(u);
+            int ladoB = contarAlcanzables(v);
+            aristas[e].cerrada = false;  // lo volvemos a abrir
+
+            PuenteInfo pi;
+            pi.arista = e;
+            pi.ladoA = ladoA;
+            pi.ladoB = ladoB;
+            pi.menor = (ladoA < ladoB) ? ladoA : ladoB;
+            lista.push_back(pi);
+        }
+        sort(lista.begin(), lista.end(), compararPorComponentes);
+
+        int total = (int)lista.size();
+        if (k > total) k = total;
+        for (int i = 0; i < k; i++) {
+            int e = lista[i].arista;
+            cout << "   " << (i + 1) << ") " << aristas[e].u << " - " << aristas[e].v
+                 << " : deja " << lista[i].ladoA << " y " << lista[i].ladoB
+                 << " nodos (aisla " << lista[i].menor << ")" << endl;
+        }
+        cout << "----------------------------------------" << endl;
+    }
+
+    // Devuelve un color de GraphViz segun el tipo de nodo.
+    string colorPorTipo(string tipo) {
+        if (tipo == "edificio")     return "lightblue";
+        if (tipo == "subestacion")  return "orange";
+        if (tipo == "pasarela")     return "lightgreen";
+        if (tipo == "interseccion") return "yellow";
+        return "lightgray";
+    }
+
+    // Genera una imagen del grafo en formato SVG (una imagen hecha de texto).
+    // El SVG se abre en cualquier navegador con doble clic, sin instalar nada.
+    // Dibuja los nodos en su posicion real (coordenadas x,y) y los conecta con
+    // lineas. Cada nodo se pinta del color de su tipo.
+    void exportarSVG(string nombreArchivo) {
+        if (vertices.size() == 0) {
+            cout << "No hay nodos para dibujar." << endl;
+            return;
+        }
+
+        // 1) Buscar los valores minimo y maximo de x e y, para saber el tamano.
+        double minX = vertices[0].x;
+        double maxX = vertices[0].x;
+        double minY = vertices[0].y;
+        double maxY = vertices[0].y;
+        for (int i = 1; i < (int)vertices.size(); i++) {
+            if (vertices[i].x < minX) minX = vertices[i].x;
+            if (vertices[i].x > maxX) maxX = vertices[i].x;
+            if (vertices[i].y < minY) minY = vertices[i].y;
+            if (vertices[i].y > maxY) maxY = vertices[i].y;
+        }
+
+        // 2) Definir el tamano de la imagen y calcular la escala.
+        double ancho = 1200;
+        double alto = 900;
+        double margen = 40;
+        double rangoX = maxX - minX;
+        double rangoY = maxY - minY;
+        if (rangoX == 0) rangoX = 1;
+        if (rangoY == 0) rangoY = 1;
+        double escalaX = (ancho - 2 * margen) / rangoX;
+        double escalaY = (alto - 2 * margen) / rangoY;
+        double escala = (escalaX < escalaY) ? escalaX : escalaY;
+
+        // 3) Calcular la posicion en pixeles de cada nodo.
+        // En SVG la y crece hacia abajo, por eso la invertimos.
+        vector<double> px;
+        vector<double> py;
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            double x = margen + (vertices[i].x - minX) * escala;
+            double y = alto - margen - (vertices[i].y - minY) * escala;
+            px.push_back(x);
+            py.push_back(y);
+        }
+
+        // 4) Escribir el archivo SVG.
+        ofstream f(nombreArchivo.c_str());
+        if (!f.is_open()) {
+            cout << "ERROR: no se pudo crear el archivo " << nombreArchivo << endl;
+            return;
+        }
+
+        f << "<svg xmlns='http://www.w3.org/2000/svg' width='" << ancho
+          << "' height='" << alto << "'>" << endl;
+        f << "<rect width='100%' height='100%' fill='white'/>" << endl;
+
+        // Primero las lineas (aristas), para que queden por debajo de los nodos.
+        for (int e = 0; e < (int)aristas.size(); e++) {
+            if (aristas[e].cerrada) {
+                continue;
+            }
+            int u = buscarIndice(aristas[e].u);
+            int v = buscarIndice(aristas[e].v);
+            if (u == -1 || v == -1) {
+                continue;
+            }
+            f << "<line x1='" << px[u] << "' y1='" << py[u]
+              << "' x2='" << px[v] << "' y2='" << py[v]
+              << "' stroke='lightgray' stroke-width='1'/>" << endl;
+        }
+
+        // Despues los nodos (circulos) con su etiqueta.
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            f << "<circle cx='" << px[i] << "' cy='" << py[i]
+              << "' r='6' fill='" << colorPorTipo(vertices[i].type)
+              << "' stroke='black' stroke-width='1'/>" << endl;
+            f << "<text x='" << (px[i] + 7) << "' y='" << (py[i] + 3)
+              << "' font-size='7'>" << vertices[i].id << "</text>" << endl;
+        }
+
+        f << "</svg>" << endl;
+        f.close();
+
+        cout << "Imagen del grafo creada en '" << nombreArchivo << "'." << endl;
     }
 };
 
