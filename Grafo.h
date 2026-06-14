@@ -7,12 +7,26 @@
 #include <string>
 #include <vector>
 #include <queue>     // para BFS (recorrido en anchura)
+#include <cmath>     // para sqrt (heuristica de A*)
+#include <algorithm> // para sort (ordenar aristas en Kruskal)
 #include <cstdlib>   // para atof
 
 #include "Vertice.h"
 #include "Arista.h"
+#include "UnionFind.h"
 
 using namespace std;
+
+// Estructura auxiliar para ordenar las aristas por su peso en Kruskal.
+struct AristaOrden {
+    double peso;   // peso de la arista (su largo)
+    int indice;    // numero de la arista en el vector de aristas
+};
+
+// Funcion de comparacion: ordena de menor a mayor peso.
+bool compararPorPeso(AristaOrden a, AristaOrden b) {
+    return a.peso < b.peso;
+}
 
 // Clase que representa el grafo de la red del campus.
 // Guarda los vertices, las aristas y una lista de adyacencia.
@@ -519,6 +533,378 @@ public:
             cout << "No hay puntos de articulacion." << endl;
         } else {
             cout << "Cantidad de puntos de articulacion: " << total << endl;
+        }
+        cout << "----------------------------------------" << endl;
+    }
+
+    // ------------------------------------------------------------
+    // MODULO 3: Ruteo (Dijkstra, A* y ruta alternativa)
+    // ------------------------------------------------------------
+
+    // Distancia en linea recta entre dos nodos (usando sus coordenadas x,y).
+    // Es la heuristica que usa A* para "adivinar" cuanto falta para llegar.
+    double distanciaRecta(int a, int b) {
+        double dx = vertices[a].x - vertices[b].x;
+        double dy = vertices[a].y - vertices[b].y;
+        return sqrt(dx * dx + dy * dy);
+    }
+
+    // Reconstruye el camino desde origen hasta destino usando el vector
+    // "previo" (que dice de que nodo venimos). Devuelve la lista de nodos
+    // en orden. Si no hay camino, devuelve una lista vacia.
+    vector<int> reconstruirCamino(vector<int> &previo, int origen, int destino) {
+        vector<int> camino;
+
+        if (destino == origen) {
+            camino.push_back(origen);
+            return camino;
+        }
+        if (previo[destino] == -1) {
+            return camino;  // vacia: no se pudo llegar
+        }
+
+        // Vamos del destino hacia atras y luego le damos vuelta.
+        vector<int> alReves;
+        int actual = destino;
+        while (actual != -1) {
+            alReves.push_back(actual);
+            actual = previo[actual];
+        }
+        for (int i = (int)alReves.size() - 1; i >= 0; i--) {
+            camino.push_back(alReves[i]);
+        }
+        return camino;
+    }
+
+    // Imprime una ruta paso a paso con el costo detallado de cada tramo
+    // y los totales de distancia y tiempo.
+    void imprimirRuta(vector<int> &camino, vector<int> &prevArista) {
+        if (camino.size() == 0) {
+            cout << "No existe una ruta entre esos nodos." << endl;
+            return;
+        }
+
+        double totalLargo = 0;
+        double totalTiempo = 0;
+
+        cout << "Ruta encontrada (" << camino.size() << " nodos):" << endl;
+        for (int k = 0; k < (int)camino.size(); k++) {
+            cout << "   " << vertices[camino[k]].id
+                 << " [" << vertices[camino[k]].type << "]";
+            if (k + 1 < (int)camino.size()) {
+                int e = prevArista[camino[k + 1]];
+                totalLargo += aristas[e].length;
+                totalTiempo += aristas[e].tiempo();
+                cout << "  --(" << aristas[e].length << " m, "
+                     << aristas[e].tiempo() << " de tiempo)-->";
+            }
+            cout << endl;
+        }
+        cout << "   Distancia total: " << totalLargo << endl;
+        cout << "   Tiempo total:    " << totalTiempo << endl;
+    }
+
+    // Algoritmo de DIJKSTRA (un origen, un destino).
+    // usarTiempo = true -> el peso es el tiempo; false -> el peso es la distancia.
+    // Llena los vectores previo y prevArista para poder reconstruir el camino.
+    // Respeta el sentido de las vias (usa la adyacencia dirigida) e ignora
+    // las aristas cerradas. Devuelve true si logro llegar al destino.
+    //
+    // Version sencilla: en cada paso busca el nodo no procesado con menor
+    // distancia recorriendo el arreglo (no usa cola de prioridad).
+    bool dijkstra(int origen, int destino, bool usarTiempo,
+                  vector<int> &previo, vector<int> &prevArista) {
+        int n = (int)vertices.size();
+        vector<double> dist;
+        vector<bool> listo;
+        previo.clear();
+        prevArista.clear();
+        for (int i = 0; i < n; i++) {
+            dist.push_back(1e18);   // 1e18 representa "infinito"
+            listo.push_back(false);
+            previo.push_back(-1);
+            prevArista.push_back(-1);
+        }
+        dist[origen] = 0;
+
+        for (int paso = 0; paso < n; paso++) {
+            // Buscar el nodo sin procesar con la menor distancia.
+            int u = -1;
+            double mejor = 1e18;
+            for (int i = 0; i < n; i++) {
+                if (!listo[i] && dist[i] < mejor) {
+                    mejor = dist[i];
+                    u = i;
+                }
+            }
+            if (u == -1) {
+                break;  // ya no quedan nodos alcanzables
+            }
+            listo[u] = true;
+
+            // Relajar las aristas que salen de u.
+            for (int k = 0; k < (int)ady[u].size(); k++) {
+                int e = ady[u][k];
+                if (aristas[e].cerrada) {
+                    continue;
+                }
+                int v = vecino(u, e);
+                double peso;
+                if (usarTiempo) {
+                    peso = aristas[e].tiempo();
+                } else {
+                    peso = aristas[e].length;
+                }
+                if (dist[u] + peso < dist[v]) {
+                    dist[v] = dist[u] + peso;
+                    previo[v] = u;
+                    prevArista[v] = e;
+                }
+            }
+        }
+
+        return dist[destino] < 1e18;
+    }
+
+    // Algoritmo A* con heuristica euclidiana.
+    // El costo real es la distancia y la heuristica es la linea recta hasta
+    // el destino, asi A* "prefiere" avanzar hacia el destino.
+    // Tambien respeta el sentido de las vias e ignora aristas cerradas.
+    bool aEstrella(int origen, int destino,
+                   vector<int> &previo, vector<int> &prevArista) {
+        int n = (int)vertices.size();
+        vector<double> g;        // costo real desde el origen
+        vector<bool> listo;
+        previo.clear();
+        prevArista.clear();
+        for (int i = 0; i < n; i++) {
+            g.push_back(1e18);
+            listo.push_back(false);
+            previo.push_back(-1);
+            prevArista.push_back(-1);
+        }
+        g[origen] = 0;
+
+        for (int paso = 0; paso < n; paso++) {
+            // Escoger el nodo sin procesar con menor f = g + heuristica.
+            int u = -1;
+            double mejor = 1e18;
+            for (int i = 0; i < n; i++) {
+                if (!listo[i] && g[i] < 1e18) {
+                    double f = g[i] + distanciaRecta(i, destino);
+                    if (f < mejor) {
+                        mejor = f;
+                        u = i;
+                    }
+                }
+            }
+            if (u == -1) {
+                break;
+            }
+            if (u == destino) {
+                break;  // ya llegamos al destino
+            }
+            listo[u] = true;
+
+            for (int k = 0; k < (int)ady[u].size(); k++) {
+                int e = ady[u][k];
+                if (aristas[e].cerrada) {
+                    continue;
+                }
+                int v = vecino(u, e);
+                double peso = aristas[e].length;  // A* trabaja con distancia
+                if (g[u] + peso < g[v]) {
+                    g[v] = g[u] + peso;
+                    previo[v] = u;
+                    prevArista[v] = e;
+                }
+            }
+        }
+
+        return g[destino] < 1e18;
+    }
+
+    // Opcion del menu: ruta mas corta con Dijkstra.
+    void rutaDijkstra(string idOrigen, string idDestino, bool usarTiempo) {
+        int oi = buscarIndice(idOrigen);
+        int di = buscarIndice(idDestino);
+        if (oi == -1 || di == -1) {
+            cout << "ERROR: alguno de los nodos no existe." << endl;
+            return;
+        }
+
+        cout << "----------------------------------------" << endl;
+        cout << " RUTA CON DIJKSTRA (";
+        if (usarTiempo) cout << "por tiempo"; else cout << "por distancia";
+        cout << ")" << endl;
+        cout << " De " << idOrigen << " a " << idDestino << endl;
+        cout << "----------------------------------------" << endl;
+
+        vector<int> previo, prevArista;
+        bool llego = dijkstra(oi, di, usarTiempo, previo, prevArista);
+        if (!llego) {
+            cout << "No existe una ruta entre esos nodos." << endl;
+            return;
+        }
+        vector<int> camino = reconstruirCamino(previo, oi, di);
+        imprimirRuta(camino, prevArista);
+        cout << "----------------------------------------" << endl;
+    }
+
+    // Opcion del menu: ruta mas corta con A*.
+    void rutaAStar(string idOrigen, string idDestino) {
+        int oi = buscarIndice(idOrigen);
+        int di = buscarIndice(idDestino);
+        if (oi == -1 || di == -1) {
+            cout << "ERROR: alguno de los nodos no existe." << endl;
+            return;
+        }
+
+        cout << "----------------------------------------" << endl;
+        cout << " RUTA CON A* (heuristica euclidiana)" << endl;
+        cout << " De " << idOrigen << " a " << idDestino << endl;
+        cout << "----------------------------------------" << endl;
+
+        vector<int> previo, prevArista;
+        bool llego = aEstrella(oi, di, previo, prevArista);
+        if (!llego) {
+            cout << "No existe una ruta entre esos nodos." << endl;
+            return;
+        }
+        vector<int> camino = reconstruirCamino(previo, oi, di);
+        imprimirRuta(camino, prevArista);
+        cout << "----------------------------------------" << endl;
+    }
+
+    // Opcion del menu: ruta alternativa.
+    // Primero calcula la ruta principal con Dijkstra, luego busca en esa ruta
+    // la arista mas "critica" (la de mayor peso), la cierra temporalmente y
+    // recalcula para encontrar un camino que la evite.
+    void rutaAlternativa(string idOrigen, string idDestino, bool usarTiempo) {
+        int oi = buscarIndice(idOrigen);
+        int di = buscarIndice(idDestino);
+        if (oi == -1 || di == -1) {
+            cout << "ERROR: alguno de los nodos no existe." << endl;
+            return;
+        }
+
+        cout << "----------------------------------------" << endl;
+        cout << " RUTA PRINCIPAL Y ALTERNATIVA" << endl;
+        cout << " De " << idOrigen << " a " << idDestino << endl;
+        cout << "----------------------------------------" << endl;
+
+        // 1) Ruta principal.
+        vector<int> previo, prevArista;
+        bool llego = dijkstra(oi, di, usarTiempo, previo, prevArista);
+        if (!llego) {
+            cout << "No existe ni siquiera una ruta principal." << endl;
+            return;
+        }
+        vector<int> caminoPrincipal = reconstruirCamino(previo, oi, di);
+        cout << ">> RUTA PRINCIPAL:" << endl;
+        imprimirRuta(caminoPrincipal, prevArista);
+
+        // 2) Buscar la arista mas critica (la de mayor peso) en esa ruta.
+        int aristaCritica = -1;
+        double pesoMax = -1;
+        for (int k = 1; k < (int)caminoPrincipal.size(); k++) {
+            int e = prevArista[caminoPrincipal[k]];
+            double peso;
+            if (usarTiempo) peso = aristas[e].tiempo(); else peso = aristas[e].length;
+            if (peso > pesoMax) {
+                pesoMax = peso;
+                aristaCritica = e;
+            }
+        }
+        if (aristaCritica == -1) {
+            cout << "La ruta no tiene aristas para evitar." << endl;
+            return;
+        }
+        cout << endl << ">> Arista mas critica de la ruta: "
+             << aristas[aristaCritica].u << " - " << aristas[aristaCritica].v
+             << " (se evitara)." << endl << endl;
+
+        // 3) Cerrar esa arista temporalmente y recalcular.
+        aristas[aristaCritica].cerrada = true;
+        vector<int> previo2, prevArista2;
+        bool llego2 = dijkstra(oi, di, usarTiempo, previo2, prevArista2);
+        aristas[aristaCritica].cerrada = false;  // la volvemos a abrir
+
+        cout << ">> RUTA ALTERNATIVA:" << endl;
+        if (!llego2) {
+            cout << "No hay ruta alternativa evitando esa arista." << endl;
+        } else {
+            vector<int> caminoAlterno = reconstruirCamino(previo2, oi, di);
+            imprimirRuta(caminoAlterno, prevArista2);
+        }
+        cout << "----------------------------------------" << endl;
+    }
+
+    // ------------------------------------------------------------
+    // MODULO 4: Cobertura minima (MST con Kruskal + Union-Find)
+    // ------------------------------------------------------------
+
+    // Calcula el arbol de expansion minima (MST) con el algoritmo de Kruskal:
+    //   1. Se ordenan TODAS las aristas de menor a mayor peso (largo).
+    //   2. Se van tomando una por una; se acepta una arista solo si une dos
+    //      grupos distintos (asi no se forman ciclos), usando Union-Find.
+    //   3. Se repite hasta conectar todo lo que se pueda.
+    // Reporta el costo total, la lista de aristas usadas y el % de ahorro
+    // comparado con usar TODA la red.
+    void calcularMST() {
+        cout << "----------------------------------------" << endl;
+        cout << " ARBOL DE EXPANSION MINIMA (Kruskal)" << endl;
+        cout << "----------------------------------------" << endl;
+
+        // 1) Armar la lista de aristas con su peso y ordenarla.
+        vector<AristaOrden> lista;
+        for (int e = 0; e < (int)aristas.size(); e++) {
+            if (aristas[e].cerrada) {
+                continue;
+            }
+            AristaOrden ao;
+            ao.peso = aristas[e].length;
+            ao.indice = e;
+            lista.push_back(ao);
+        }
+        sort(lista.begin(), lista.end(), compararPorPeso);
+
+        // 2) Recorrer las aristas ordenadas y armar el arbol.
+        UnionFind uf(vertices.size());
+        double costoTotal = 0;
+        int usadas = 0;
+
+        cout << "Aristas escogidas para el tendido minimo:" << endl;
+        for (int k = 0; k < (int)lista.size(); k++) {
+            int e = lista[k].indice;
+            int u = buscarIndice(aristas[e].u);
+            int v = buscarIndice(aristas[e].v);
+
+            // Solo la usamos si conecta dos grupos distintos (evita ciclos).
+            if (!uf.mismoGrupo(u, v)) {
+                uf.unir(u, v);
+                costoTotal += aristas[e].length;
+                usadas++;
+                cout << "  " << aristas[e].u << " - " << aristas[e].v
+                     << " (largo=" << aristas[e].length << ")" << endl;
+            }
+        }
+
+        // 3) Calcular el costo de usar TODA la red (para el % de ahorro).
+        double costoCompleto = 0;
+        for (int e = 0; e < (int)aristas.size(); e++) {
+            if (!aristas[e].cerrada) {
+                costoCompleto += aristas[e].length;
+            }
+        }
+
+        cout << "----------------------------------------" << endl;
+        cout << "Aristas en el arbol: " << usadas << endl;
+        cout << "Costo total del MST: " << costoTotal << endl;
+        cout << "Costo de la red completa: " << costoCompleto << endl;
+        if (costoCompleto > 0) {
+            double ahorro = (1.0 - (costoTotal / costoCompleto)) * 100.0;
+            cout << "Ahorro respecto a la red completa: " << ahorro << " %" << endl;
         }
         cout << "----------------------------------------" << endl;
     }
