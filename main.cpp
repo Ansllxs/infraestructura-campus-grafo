@@ -9,6 +9,9 @@ void mostrarMenu() {
     cout << "==================== MENU ====================" << endl;
     cout << "1. Validar datos (resumen del grafo)" << endl;
     cout << "2. Mostrar el grafo (representacion textual)" << endl;
+    cout << "3. Componentes conexas (BFS - anchura)" << endl;
+    cout << "4. Componentes conexas (DFS - profundidad)" << endl;
+    cout << "5. Puentes y puntos de articulacion (Tarjan)" << endl;
     cout << "0. Salir" << endl;
     cout << "==============================================" << endl;
     cout << "Elija una opcion: ";
@@ -38,6 +41,15 @@ int main() {
             cout << "Cuantos nodos mostrar? (0 = todos): ";
             cin >> cantidad;
             g.mostrarTextual(cantidad);
+        }
+        else if (opcion == 3) {
+            g.mostrarComponentes(true);   // true = usar BFS
+        }
+        else if (opcion == 4) {
+            g.mostrarComponentes(false);  // false = usar DFS
+        }
+        else if (opcion == 5) {
+            g.mostrarPuentesYArticulaciones();
         }
         else if (opcion == 0) {
             cout << "Saliendo del programa..." << endl;

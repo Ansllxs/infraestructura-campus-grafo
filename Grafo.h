@@ -278,6 +278,250 @@ public:
         }
         cout << "========================================" << endl;
     }
+
+    // ------------------------------------------------------------
+    // MODULO 2: Conectividad y puntos criticos
+    // ------------------------------------------------------------
+
+    // Construye una lista de adyacencia tratando el grafo como NO dirigido
+    // (sin importar el sentido de las vias). La usamos para conectividad,
+    // puentes y articulaciones. Llena dos vectores en paralelo:
+    //   gv[i] = lista de nodos vecinos de i
+    //   ge[i] = numero de la arista por la que se llega a ese vecino
+    // Las aristas cerradas (simulacion) se ignoran.
+    void construirNoDirigida(vector<vector<int>> &gv, vector<vector<int>> &ge) {
+        gv.clear();
+        ge.clear();
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            vector<int> vacia1;
+            vector<int> vacia2;
+            gv.push_back(vacia1);
+            ge.push_back(vacia2);
+        }
+        for (int e = 0; e < (int)aristas.size(); e++) {
+            if (aristas[e].cerrada) {
+                continue;
+            }
+            int posU = buscarIndice(aristas[e].u);
+            int posV = buscarIndice(aristas[e].v);
+            if (posU == -1 || posV == -1) {
+                continue;
+            }
+            gv[posU].push_back(posV);
+            ge[posU].push_back(e);
+            gv[posV].push_back(posU);
+            ge[posV].push_back(e);
+        }
+    }
+
+    // Recorrido en ANCHURA (BFS) desde un nodo de inicio.
+    // Marca como visitados todos los nodos que alcanza y los guarda en "grupo".
+    void recorridoBFS(int inicio, vector<vector<int>> &gv,
+                      vector<bool> &visitado, vector<int> &grupo) {
+        queue<int> cola;
+        cola.push(inicio);
+        visitado[inicio] = true;
+
+        while (!cola.empty()) {
+            int actual = cola.front();
+            cola.pop();
+            grupo.push_back(actual);
+
+            for (int k = 0; k < (int)gv[actual].size(); k++) {
+                int vecinoNodo = gv[actual][k];
+                if (!visitado[vecinoNodo]) {
+                    visitado[vecinoNodo] = true;
+                    cola.push(vecinoNodo);
+                }
+            }
+        }
+    }
+
+    // Recorrido en PROFUNDIDAD (DFS) desde un nodo, usando recursion.
+    void recorridoDFS(int actual, vector<vector<int>> &gv,
+                      vector<bool> &visitado, vector<int> &grupo) {
+        visitado[actual] = true;
+        grupo.push_back(actual);
+
+        for (int k = 0; k < (int)gv[actual].size(); k++) {
+            int vecinoNodo = gv[actual][k];
+            if (!visitado[vecinoNodo]) {
+                recorridoDFS(vecinoNodo, gv, visitado, grupo);
+            }
+        }
+    }
+
+    // Busca las componentes conexas del grafo.
+    // usarBFS = true -> usa BFS (anchura); false -> usa DFS (profundidad).
+    // Muestra cuantas componentes hay y el tamano de cada una.
+    void mostrarComponentes(bool usarBFS) {
+        vector<vector<int>> gv, ge;
+        construirNoDirigida(gv, ge);
+
+        vector<bool> visitado;
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            visitado.push_back(false);
+        }
+
+        cout << "----------------------------------------" << endl;
+        if (usarBFS) {
+            cout << " COMPONENTES CONEXAS (BFS - anchura)" << endl;
+        } else {
+            cout << " COMPONENTES CONEXAS (DFS - profundidad)" << endl;
+        }
+        cout << "----------------------------------------" << endl;
+
+        int numComponente = 0;
+        for (int i = 0; i < (int)vertices.size(); i++) {
+            if (!visitado[i]) {
+                numComponente++;
+                vector<int> grupo;
+                if (usarBFS) {
+                    recorridoBFS(i, gv, visitado, grupo);
+                } else {
+                    recorridoDFS(i, gv, visitado, grupo);
+                }
+
+                cout << "Componente " << numComponente << ": "
+                     << grupo.size() << " nodos. Empieza en "
+                     << vertices[grupo[0]].id << endl;
+            }
+        }
+
+        if (numComponente == 1) {
+            cout << "=> El grafo es CONEXO (todo esta conectado)." << endl;
+        } else {
+            cout << "=> El grafo NO es conexo: tiene "
+                 << numComponente << " partes separadas." << endl;
+        }
+        cout << "----------------------------------------" << endl;
+    }
+
+    // ---- Puentes y puntos de articulacion (algoritmo de Tarjan) ----
+    //
+    // Un PUENTE es una arista que, si se quita, parte el grafo en mas trozos.
+    // Un PUNTO DE ARTICULACION es un nodo que, si se quita, hace lo mismo.
+    //
+    // Tarjan recorre el grafo en profundidad guardando para cada nodo:
+    //   disc[u] = en que paso fue descubierto (orden de visita)
+    //   low[u]  = el descubrimiento mas antiguo al que puede "trepar"
+    //             usando las aristas del arbol y una arista de retorno.
+    // Con esos dos numeros se decide si una arista es puente o un nodo
+    // es articulacion.
+
+    void dfsTarjan(int u, int aristaPadre, int &tiempo,
+                   vector<vector<int>> &gv, vector<vector<int>> &ge,
+                   vector<int> &disc, vector<int> &low, vector<bool> &visitado,
+                   vector<bool> &esArticulacion, vector<int> &puentes,
+                   int raiz, int &hijosDeLaRaiz) {
+        visitado[u] = true;
+        disc[u] = low[u] = tiempo;
+        tiempo++;
+
+        for (int k = 0; k < (int)gv[u].size(); k++) {
+            int v = gv[u][k];
+            int e = ge[u][k];
+
+            // No devolverse por la misma arista por la que llegamos.
+            if (e == aristaPadre) {
+                continue;
+            }
+
+            if (!visitado[v]) {
+                if (u == raiz) {
+                    hijosDeLaRaiz++;
+                }
+                dfsTarjan(v, e, tiempo, gv, ge, disc, low, visitado,
+                          esArticulacion, puentes, raiz, hijosDeLaRaiz);
+
+                // El low del hijo puede mejorar el del padre.
+                if (low[v] < low[u]) {
+                    low[u] = low[v];
+                }
+
+                // Si el hijo no puede trepar mas arriba que u, la arista u-v
+                // es un puente.
+                if (low[v] > disc[u]) {
+                    puentes.push_back(e);
+                }
+
+                // Articulacion (para nodos que NO son la raiz).
+                if (u != raiz && low[v] >= disc[u]) {
+                    esArticulacion[u] = true;
+                }
+            } else {
+                // Arista de retorno: actualizamos low con el disc del vecino.
+                if (disc[v] < low[u]) {
+                    low[u] = disc[v];
+                }
+            }
+        }
+    }
+
+    // Ejecuta Tarjan en todo el grafo y muestra los puentes y las
+    // articulaciones encontradas.
+    void mostrarPuentesYArticulaciones() {
+        vector<vector<int>> gv, ge;
+        construirNoDirigida(gv, ge);
+
+        int n = (int)vertices.size();
+        vector<int> disc, low;
+        vector<bool> visitado, esArticulacion;
+        for (int i = 0; i < n; i++) {
+            disc.push_back(0);
+            low.push_back(0);
+            visitado.push_back(false);
+            esArticulacion.push_back(false);
+        }
+
+        vector<int> puentes;   // guardamos los numeros de arista que son puente
+        int tiempo = 0;
+
+        // Recorremos cada componente (por si el grafo no es conexo).
+        for (int i = 0; i < n; i++) {
+            if (!visitado[i]) {
+                int hijosDeLaRaiz = 0;
+                dfsTarjan(i, -1, tiempo, gv, ge, disc, low, visitado,
+                          esArticulacion, puentes, i, hijosDeLaRaiz);
+
+                // La raiz es articulacion solo si tiene mas de un hijo.
+                if (hijosDeLaRaiz > 1) {
+                    esArticulacion[i] = true;
+                }
+            }
+        }
+
+        cout << "----------------------------------------" << endl;
+        cout << " PUENTES (caminos criticos)" << endl;
+        cout << "----------------------------------------" << endl;
+        if (puentes.size() == 0) {
+            cout << "No hay puentes en el grafo." << endl;
+        } else {
+            cout << "Cantidad de puentes: " << puentes.size() << endl;
+            for (int k = 0; k < (int)puentes.size(); k++) {
+                int e = puentes[k];
+                cout << "  " << aristas[e].u << " - " << aristas[e].v
+                     << " (largo=" << aristas[e].length << ")" << endl;
+            }
+        }
+
+        cout << "----------------------------------------" << endl;
+        cout << " PUNTOS DE ARTICULACION (lugares criticos)" << endl;
+        cout << "----------------------------------------" << endl;
+        int total = 0;
+        for (int i = 0; i < n; i++) {
+            if (esArticulacion[i]) {
+                total++;
+                cout << "  " << vertices[i].id << " [" << vertices[i].type << "]" << endl;
+            }
+        }
+        if (total == 0) {
+            cout << "No hay puntos de articulacion." << endl;
+        } else {
+            cout << "Cantidad de puntos de articulacion: " << total << endl;
+        }
+        cout << "----------------------------------------" << endl;
+    }
 };
 
 #endif
