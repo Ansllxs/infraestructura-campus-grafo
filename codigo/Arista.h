@@ -1,3 +1,8 @@
+// Arista.h
+// Proyecto III - Estructuras de Datos
+// Angie Alpizar Porras
+// Aqui guardo una conexion (camino) entre dos nodos.
+
 #ifndef ARISTA_H
 #define ARISTA_H
 

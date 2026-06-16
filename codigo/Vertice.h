@@ -1,3 +1,8 @@
+// Vertice.h
+// Proyecto III - Estructuras de Datos
+// Angie Alpizar Porras
+// Aqui guardo los datos de un nodo (un lugar del campus).
+
 #ifndef VERTICE_H
 #define VERTICE_H
 

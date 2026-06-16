@@ -1,3 +1,9 @@
+// Grafo.h
+// Proyecto III - Estructuras de Datos
+// Angie Alpizar Porras
+// Clase principal. Tiene el grafo del campus y todos los
+// algoritmos: carga, BFS/DFS, Tarjan, Dijkstra, A*, MST, etc.
+
 #ifndef GRAFO_H
 #define GRAFO_H
 
@@ -1047,7 +1053,7 @@ public:
     }
 
     // ------------------------------------------------------------
-    // MODULO 6: Reportes y representacion grafica (GraphViz)
+    // MODULO 6: Reportes
     // ------------------------------------------------------------
 
     // Calcula el grado (cantidad de aristas que lo tocan) de cada nodo.
@@ -1158,101 +1164,6 @@ public:
                  << " nodos (aisla " << lista[i].menor << ")" << endl;
         }
         cout << "----------------------------------------" << endl;
-    }
-
-    // Devuelve un color de GraphViz segun el tipo de nodo.
-    string colorPorTipo(string tipo) {
-        if (tipo == "edificio")     return "lightblue";
-        if (tipo == "subestacion")  return "orange";
-        if (tipo == "pasarela")     return "lightgreen";
-        if (tipo == "interseccion") return "yellow";
-        return "lightgray";
-    }
-
-    // Genera una imagen del grafo en formato SVG (una imagen hecha de texto).
-    // El SVG se abre en cualquier navegador con doble clic, sin instalar nada.
-    // Dibuja los nodos en su posicion real (coordenadas x,y) y los conecta con
-    // lineas. Cada nodo se pinta del color de su tipo.
-    void exportarSVG(string nombreArchivo) {
-        if (vertices.size() == 0) {
-            cout << "No hay nodos para dibujar." << endl;
-            return;
-        }
-
-        // 1) Buscar los valores minimo y maximo de x e y, para saber el tamano.
-        double minX = vertices[0].x;
-        double maxX = vertices[0].x;
-        double minY = vertices[0].y;
-        double maxY = vertices[0].y;
-        for (int i = 1; i < (int)vertices.size(); i++) {
-            if (vertices[i].x < minX) minX = vertices[i].x;
-            if (vertices[i].x > maxX) maxX = vertices[i].x;
-            if (vertices[i].y < minY) minY = vertices[i].y;
-            if (vertices[i].y > maxY) maxY = vertices[i].y;
-        }
-
-        // 2) Definir el tamano de la imagen y calcular la escala.
-        double ancho = 1200;
-        double alto = 900;
-        double margen = 40;
-        double rangoX = maxX - minX;
-        double rangoY = maxY - minY;
-        if (rangoX == 0) rangoX = 1;
-        if (rangoY == 0) rangoY = 1;
-        double escalaX = (ancho - 2 * margen) / rangoX;
-        double escalaY = (alto - 2 * margen) / rangoY;
-        double escala = (escalaX < escalaY) ? escalaX : escalaY;
-
-        // 3) Calcular la posicion en pixeles de cada nodo.
-        // En SVG la y crece hacia abajo, por eso la invertimos.
-        vector<double> px;
-        vector<double> py;
-        for (int i = 0; i < (int)vertices.size(); i++) {
-            double x = margen + (vertices[i].x - minX) * escala;
-            double y = alto - margen - (vertices[i].y - minY) * escala;
-            px.push_back(x);
-            py.push_back(y);
-        }
-
-        // 4) Escribir el archivo SVG.
-        ofstream f(nombreArchivo.c_str());
-        if (!f.is_open()) {
-            cout << "ERROR: no se pudo crear el archivo " << nombreArchivo << endl;
-            return;
-        }
-
-        f << "<svg xmlns='http://www.w3.org/2000/svg' width='" << ancho
-          << "' height='" << alto << "'>" << endl;
-        f << "<rect width='100%' height='100%' fill='white'/>" << endl;
-
-        // Primero las lineas (aristas), para que queden por debajo de los nodos.
-        for (int e = 0; e < (int)aristas.size(); e++) {
-            if (aristas[e].cerrada) {
-                continue;
-            }
-            int u = buscarIndice(aristas[e].u);
-            int v = buscarIndice(aristas[e].v);
-            if (u == -1 || v == -1) {
-                continue;
-            }
-            f << "<line x1='" << px[u] << "' y1='" << py[u]
-              << "' x2='" << px[v] << "' y2='" << py[v]
-              << "' stroke='lightgray' stroke-width='1'/>" << endl;
-        }
-
-        // Despues los nodos (circulos) con su etiqueta.
-        for (int i = 0; i < (int)vertices.size(); i++) {
-            f << "<circle cx='" << px[i] << "' cy='" << py[i]
-              << "' r='6' fill='" << colorPorTipo(vertices[i].type)
-              << "' stroke='black' stroke-width='1'/>" << endl;
-            f << "<text x='" << (px[i] + 7) << "' y='" << (py[i] + 3)
-              << "' font-size='7'>" << vertices[i].id << "</text>" << endl;
-        }
-
-        f << "</svg>" << endl;
-        f.close();
-
-        cout << "Imagen del grafo creada en '" << nombreArchivo << "'." << endl;
     }
 };
 

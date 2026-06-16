@@ -1,3 +1,8 @@
+// main.cpp
+// Proyecto III - Estructuras de Datos
+// Angie Alpizar Porras
+// Programa principal: carga los datos y muestra el menu.
+
 #include <iostream>
 #include "Grafo.h"
 
@@ -8,7 +13,7 @@ void mostrarMenu() {
     cout << endl;
     cout << "==================== MENU ====================" << endl;
     cout << "1. Validar datos (resumen del grafo)" << endl;
-    cout << "2. Ver el grafo (en texto o como imagen)" << endl;
+    cout << "2. Ver el grafo (representacion textual)" << endl;
     cout << "3. Componentes conexas (BFS - anchura)" << endl;
     cout << "4. Componentes conexas (DFS - profundidad)" << endl;
     cout << "5. Puentes y puntos de articulacion (Tarjan)" << endl;
@@ -44,23 +49,10 @@ int main() {
             g.validar();
         }
         else if (opcion == 2) {
-            int formato;
-            cout << "Como quiere ver el grafo? (1 = texto, 2 = imagen): ";
-            cin >> formato;
-            if (formato == 1) {
-                int cantidad;
-                cout << "Cuantos nodos mostrar? (0 = todos): ";
-                cin >> cantidad;
-                g.mostrarTextual(cantidad);
-            }
-            else if (formato == 2) {
-                g.exportarSVG("grafo.svg");
-                // Abrir la imagen en el navegador por defecto (Windows).
-                system("start grafo.svg");
-            }
-            else {
-                cout << "Opcion no valida." << endl;
-            }
+            int cantidad;
+            cout << "Cuantos nodos mostrar? (0 = todos): ";
+            cin >> cantidad;
+            g.mostrarTextual(cantidad);
         }
         else if (opcion == 3) {
             g.mostrarComponentes(true);   // true = usar BFS

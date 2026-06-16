@@ -1,3 +1,8 @@
+// UnionFind.h
+// Proyecto III - Estructuras de Datos
+// Angie Alpizar Porras
+// Estructura Union-Find que usa Kruskal para armar el MST.
+
 #ifndef UNIONFIND_H
 #define UNIONFIND_H
 
